@@ -116,6 +116,18 @@ def association_rules(df, metric="confidence", min_threshold=0.8, support_only=F
             zhangs_metric = np.where(denominator == 0, 0, numerator / denominator)
 
         return zhangs_metric
+    
+    def certainty_factor_helper(sAC,sA,sC):
+            confidence = sAC / sA
+            cf = np.zeros(confidence.shape)
+            
+            # Assign value where confidence > sC
+            cf[confidence > sC] = ((confidence-sC)/(1-sC))[confidence > sC]
+
+            # Assign value where sC > confidence
+            cf[sC > confidence] = ((confidence-sC)/sC)[sC > confidence]
+
+            return cf
 
     # metrics for association rules
     metric_dict = {
@@ -127,6 +139,7 @@ def association_rules(df, metric="confidence", min_threshold=0.8, support_only=F
         "leverage": lambda sAC, sA, sC: metric_dict["support"](sAC, sA, sC) - sA * sC,
         "conviction": lambda sAC, sA, sC: conviction_helper(sAC, sA, sC),
         "zhangs_metric": lambda sAC, sA, sC: zhangs_metric_helper(sAC, sA, sC),
+        "certainty_factor": lambda sAC, sA, sC: certainty_factor_helper(sAC, sA, sC),
     }
 
     columns_ordered = [
@@ -138,6 +151,7 @@ def association_rules(df, metric="confidence", min_threshold=0.8, support_only=F
         "leverage",
         "conviction",
         "zhangs_metric",
+        "certainty_factor"
     ]
 
     # check for metric compliance
