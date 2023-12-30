@@ -9,5 +9,6 @@ from .association_rules import association_rules
 from .fpgrowth import fpgrowth
 from .fpmax import fpmax
 from .hmine import hmine
+from .pipe_rules import TransactionEncoder, RuleExtractor, NegativeItems, FilterByItem, FilterByValue
 
-__all__ = ["apriori", "association_rules", "fpgrowth", "fpmax", "hmine"]
+__all__ = ["apriori", "association_rules", "fpgrowth", "fpmax", "hmine", "pipe_rules"]
