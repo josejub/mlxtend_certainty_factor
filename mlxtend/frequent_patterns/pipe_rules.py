@@ -206,8 +206,7 @@ class RuleExtractor(BaseEstimator, TransformerMixin):
         if not isinstance(min_threshold, np.number) or not (thresholds[metric][0] < min_threshold < thresholds[metric][1]):
             raise ValueError(
                 "`min_threshold` must be a numeric value "
-                "between %s and %s`. " % thresholds[metric][0], thresholds[metric][1]
-                "Got %s." % min_threshold
+                "between %s and %s`. Got %s." % thresholds[metric][0], thresholds[metric][1], min_threshold
             )
         
         if not isinstance(max_len, int) or max_len < 2:
@@ -609,7 +608,7 @@ class FilterByValue(BaseEstimator, TransformerMixin):
     metric: Metric to filter rules.
     value: value of the metric to filter rules based on
     direction: direction of the comparison. It can be one of "<" or ">".
-    order_asc: Should the retrieved rules be ordered based on the emtric used to filter? Set by default to None, in which case it does not make any ordering.
+    order_asc: Should the retrieved rules be ordered based on the metric used to filter? Set by default to None, in which case it does not make any ordering.
 
     See documentation for use cases.
 
@@ -633,8 +632,7 @@ class FilterByValue(BaseEstimator, TransformerMixin):
         if not isinstance(value, np.number) or not (thresholds[metric][0] < value < thresholds[metric][1]):
             raise ValueError(
                 "`min_threshold` must be a numeric value "
-                "between %s and %s`. " % thresholds[metric][0], thresholds[metric][1]
-                "Got %s." % value
+                "between %s and %s`. Got %s. " % thresholds[metric][0], thresholds[metric][1], value
             )
         
         if direction not in [">","<"]:
