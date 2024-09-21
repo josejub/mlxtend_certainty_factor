@@ -93,24 +93,20 @@ class TransactionEncoder(BaseEstimator, TransformerMixin):
 
             labels_numer = {name: [f"{name}={np.round(arr[i],2)}-{np.round(arr[i+1],2)}" for i in range(len(arr)-1)] for name, arr in zip(self.disc.get_feature_names_out(),self.disc.bin_edges_)}
             labels_bas += [l for name in labels_numer for l in labels_numer[name]]
-            # print(labels_numer)
-            # Cambio cada valor entero por la etiqueta que le corresponde.
+            # Change numerical values by it's corresponding label.
             for i in labels_numer:
                 mapper = dict(zip(sorted(dat_disc[i].unique()),labels_numer[str(i)]))
-                # print(mapper)
                 dat_disc[i] = dat_disc[i].map(mapper)
             discretized = pd.concat([discretized,dat_disc],axis=1)
         
         if not categ.empty:
-            # Añado <Variable> = valor para las variables categóricas.
+            # Add labels as <variable>=value for categorical variables.
             categ_aux = {name: [f"{name}={i}" for i in categ[name]] for name in categ}
             labels_categ = {name: np.unique(categ_aux[name]).tolist() for name in categ}
             labels_bas += [l for name in labels_categ for l in labels_categ[name]]
-            # print(labels_categ)
-            # cambio los valores por las categorías que le corresponda
+            # Change values by its corresponding label.
             for i in labels_categ:
                 mapper = dict(zip(sorted(categ[i].unique()),labels_categ[i]))
-                # print(mapper)
                 categ[i] = categ[i].map(mapper)
             
             discretized = pd.concat([discretized,categ],axis=1)
@@ -268,11 +264,7 @@ class RuleExtractor(BaseEstimator, TransformerMixin):
         """
         self.fit(transac)
 
-        rules = self.rules
-
-        # Change antecedents from frozensets to string to enable string-based search
-        rules["antecedents"] = rules["antecedents"].apply(lambda x: ', '.join(list(x))).astype("unicode")
-        rules["consequents"] = rules["consequents"].apply(lambda x: ', '.join(list(x))).astype("unicode")
+        rules = self.transform(self.rules)
 
         return rules
 
@@ -371,32 +363,9 @@ class NegativeItems(BaseEstimator, TransformerMixin):
         data: pd.Dataframe containing the transactions in OneHotEncoded format. It can be the output of TransactionEncoderDataframe, for example.
         """
 
-        if not all(data.dtypes == "Sparse[bool, False]") or not all(data.dtypes == "bool"):
-            raise ValueError(
-                "`data` must be a one-hot encoded"
-                "dataframe having all bool or all Sparse[bool, False] dtypes`. "
-                "Got %s. dtypes" % data.dtypes.tolist()
-            )
-        
-        data_copy = data.copy()
-        for variable in self.columns:
-            selected_columns = data.columns[data.columns.str.contains(variable)]
+        negative_onehot = self.transform(data)
 
-            for name in selected_columns:
-                neg_name = name.split("=")[0] + "=¬" + name.split("=")[1]
-                data_copy[neg_name] = data[name].map(lambda x: True if not x else False).astype(bool)
-
-        # Fill value must be 0-False, and by default negated columns have more True than False values, so the fill value would be True and raises an error.
-        # To fix this simply change True by False in those columns
-        cols_with_true_fill = [col for col in data_copy.columns if data_copy[col].dtype == pd.SparseDtype(bool) and data_copy[col].sparse.fill_value]
-        data_copy[cols_with_true_fill] = data_copy[cols_with_true_fill].replace({True: False})
-
-        # Convert all columns to type "SparseDtype(bool)" with fill value False
-        for col in data_copy.columns:
-            if data_copy[col].dtype != pd.SparseDtype(bool):
-                data_copy[col] = pd.arrays.SparseArray(data_copy[col], dtype=pd.SparseDtype(bool))
-
-        return data_copy
+        return negative_onehot
 
 class FilterByItem(BaseEstimator, TransformerMixin):
     '''
@@ -494,19 +463,17 @@ class FilterByItem(BaseEstimator, TransformerMixin):
 
         # Filter for one item and given length in given position.
         if isinstance(self.length, int) and isinstance(self.items, str):
-            # print("Entero - string")
             mask =  rules[self.position].str.contains(self.items,case=False).to_numpy() & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length)
             select = rules.loc[mask]
 
         # Filter by various items and length for given position.
         elif isinstance(self.length, int) and isinstance(self.items, list):
-            # print("Entero - list")
             mask =  rules[self.position].str.contains("|".join(self.items),case=False).to_numpy() & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length)
             aux = rules.loc[mask]
             select = pd.concat([select,aux],axis=0)
+
         # Filter by one item and lengths in consequent and antecedent.
         elif isinstance(self.length, list) and isinstance(self.items, str):
-            # print("List - string")
             mask =  rules[self.position].str.contains(self.items,case=False).to_numpy() & (np.array([len(cons) for cons in rules.antecedents.str.split(",")]) == self.length[0]) & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length[1])
             select = rules.loc[mask]
 
@@ -546,56 +513,7 @@ class FilterByItem(BaseEstimator, TransformerMixin):
 
         """
 
-        if not all([col in rules.columns for col in ["antecedents", "consequents"]]):
-            raise ValueError(
-                "`rules` must be a "
-                "pd.DataFrame containing antecedents and consequents"
-                "It lacks %s columns." % [col for col in ["antecedents", "consequents"] if col not in rules.columns]
-            )
-        
-        select = pd.DataFrame()
-
-        # Filter for one item and given length in given position.
-        if isinstance(self.length, int) and isinstance(self.items, str):
-            # print("Entero - string")
-            mask =  rules[self.position].str.contains(self.items,case=False).to_numpy() & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length)
-            select = rules.loc[mask]
-
-        # Filter by various items and length for given position.
-        elif isinstance(self.length, int) and isinstance(self.items, list):
-            # print("Entero - list")
-            mask =  rules[self.position].str.contains("|".join(self.items),case=False).to_numpy() & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length)
-            aux = rules.loc[mask]
-            select = pd.concat([select,aux],axis=0)
-        # Filter by one item and lengths in consequent and antecedent.
-        elif isinstance(self.length, list) and isinstance(self.items, str):
-            # print("List - string")
-            mask =  rules[self.position].str.contains(self.items,case=False).to_numpy() & (np.array([len(cons) for cons in rules.antecedents.str.split(",")]) == self.length[0]) & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length[1])
-            select = rules.loc[mask]
-
-        # Filter by various items in both antecedent and consequent and by lengths in consequent and antecedent
-        elif isinstance(self.items, list) and isinstance(self.items[0], list) and isinstance(self.items[1], list) and isinstance(self.length, list):
-            # print("List - List")
-            items_antec = self.items[0]
-            items_conse = self.items[1]
-
-            if isinstance(items_antec, str):
-                items_antec = [items_antec]
-            if isinstance(items_conse, str):
-                items_antec = [items_conse]
-
-            for item_antec in items_antec:
-                for item_conse in items_conse:
-                    mask =  rules.antecedents.str.contains(item_antec,case=False).to_numpy() & rules.consequents.str.contains(item_conse,case=False).to_numpy() & (np.array([len(cons) for cons in rules.antecedents.str.split(",")]) == self.length[0]) & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length[1])
-                    aux = rules.loc[mask]
-                    select = pd.concat([select,aux])
-        
-        # Filter by various items in a given position and by lengths in antecedent and consequent.
-        elif isinstance(self.items, list) and all([isinstance(x,str) for x in self.items]) and isinstance(self.length, list):
-            for item in self.items:
-                mask =  rules[self.position].str.contains(item,case=False).to_numpy() & (np.array([len(cons) for cons in rules.antecedents.str.split(",")]) == self.length[0]) & (np.array([len(cons) for cons in rules.consequents.str.split(",")]) == self.length[1])
-                aux = rules.loc[mask]
-                select = pd.concat([select,aux],axis=0)
+        select = self.transform(rules)
         
         return select
 
@@ -637,7 +555,7 @@ class FilterByValue(BaseEstimator, TransformerMixin):
         
         if direction not in [">","<"]:
             raise ValueError(
-                "`direction` must be a float "
+                "`direction` must be "
                 "one of < or >`. Got %s." % direction
             )
         
@@ -698,25 +616,6 @@ class FilterByValue(BaseEstimator, TransformerMixin):
 
         """
 
-        if self.metric not in rules.columns:
-            raise ValueError(
-                "`rules` must contain a column with"
-                "the selected metric name`. Did not found %s on the DataFrame." % self.metric
-            )
-
-        select = pd.DataFrame(columns=rules.columns)
-        if  isinstance(self.value, int) or isinstance(self.value, float):
-            if self.direction == ">":
-                mask = rules[self.metric]>self.value
-                select = rules.loc[mask]
-            if self.direction == "<":
-                mask = rules[self.metric]<self.value 
-                select = rules.loc[mask]
-        elif isinstance(self.value, list):
-            mask = rules[self.metric].between(self.value[0], self.value[1])
-            select = rules.loc[mask]
-        
-        if self.order_asc is not None:
-            select = select.sort_values(by=self.metric, ascending=self.order_asc)
+        select = self.transform(rules)
         
         return select
